@@ -120,6 +120,21 @@
         <button id="logoutBtn">Log out</button>
     </div>
 
+    <iframe name="hiddenFrame" style="display:none;"></iframe>
+
+    <form id="spreadsheetForm" method="POST" target="hiddenFrame" style="display:none;"
+        action="https://script.google.com/macros/s/AKfycbxbU9QqHS1oyYMBZz4kdNr1YYNHAlUZLIw-NWum8pjcZ8xckfHQgm6P1Qm6pa3oEzdCKQ/exec">
+        <input name="fullname" id="fullnameField" />
+        <input name="email" id="emailField" />
+        <input name="phonenumber" id="phoneField" />
+        <input name="sourceLang" id="sourceLangField" />
+        <input name="targetLang" id="targetLangField" />
+        <input name="notes" id="notesField" />
+        <input name="fileName" id="fileNameField" />
+        <input name="fileURL" id="fileURLField" />
+    </form>
+
+
     <!-- 🔽 SCRIPTS al final del body 🔽 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
@@ -226,29 +241,16 @@
                 });
                 console.log("✅ Email sent!", emailResponse);
 
-                // ✅ 4. Actualizar Google Spreadsheet
-                try {
-                    const sheetResponse = await fetch("https://script.google.com/macros/s/AKfycbxbU9QqHS1oyYMBZz4kdNr1YYNHAlUZLIw-NWum8pjcZ8xckfHQgm6P1Qm6pa3oEzdCKQ/exec", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            fullname: clientFullName,
-                            email: "info@rolling-translations.com",
-                            phonenumber: "",
-                            sourceLang: sourceLang.join(", "),
-                            targetLang: targetLang.join(", "),
-                            notes,
-                            fileName: file.name,
-                            fileURL
-                        })
-                    });
+                document.getElementById("fullnameField").value = clientFullName;
+                document.getElementById("emailField").value = "info@rolling-translations.com";
+                document.getElementById("phoneField").value = "";
+                document.getElementById("sourceLangField").value = sourceLang.join(", ");
+                document.getElementById("targetLangField").value = targetLang.join(", ");
+                document.getElementById("notesField").value = notes;
+                document.getElementById("fileNameField").value = file.name;
+                document.getElementById("fileURLField").value = fileURL;
 
-                    const sheetResult = await sheetResponse.json();
-                    console.log("📊 Spreadsheet updated:", sheetResult);
-
-                } catch (spreadsheetError) {
-                    console.warn("⚠️ Could not update spreadsheet:", spreadsheetError);
-                }
+                document.getElementById("spreadsheetForm").submit();
 
                 form.reset();
                 confirmationMsg.style.display = "block";
