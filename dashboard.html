@@ -131,7 +131,6 @@
         <input name="targetLang" id="targetLangField" />
         <input name="notes" id="notesField" />
         <input name="fileName" id="fileNameField" />
-        <input name="fileURL" id="fileURLField" />
     </form>
 
 
@@ -216,7 +215,6 @@
                 // ✅ 1. Subir archivo a Firebase
                 const fileRef = ref(storage, `projects/${Date.now()}_${file.name}`);
                 await uploadBytes(fileRef, file);
-                const fileURL = await getDownloadURL(fileRef);
 
                 // ✅ 2. Guardar en Firestore
                 await addDoc(collection(db, "projectRequests"), {
@@ -224,7 +222,6 @@
                     targetLang: targetLang.join(", "),
                     notes,
                     file: file.name,
-                    fileURL,
                     createdAt: serverTimestamp()
                 });
 
@@ -248,7 +245,6 @@
                 document.getElementById("targetLangField").value = targetLang.join(", ");
                 document.getElementById("notesField").value = notes;
                 document.getElementById("fileNameField").value = file.name;
-                document.getElementById("fileURLField").value = fileURL;
 
                 document.getElementById("spreadsheetForm").submit();
 
