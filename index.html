@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,6 +8,7 @@
   <meta name="robots" content="noindex, nofollow" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <div class="ribbon">
     Crowdsourced Translation — separate, opt‑in service for <b>non‑regulated, low‑risk content</b>.
@@ -33,14 +35,16 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
     import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-
+    import { getAnalytics } from "firebase/analytics";
+    
     const firebaseConfig = {
-      apiKey: "AIzaSyBYjq_CaTEfFhfTChfJ6SnXSbgIzbbRHHc",
-      authDomain: "rollingtranslationsportal.firebaseapp.com",
-      projectId: "rollingtranslationsportal",
-      storageBucket: "rollingtranslationsportal.firebasestorage.app",
-      messagingSenderId: "492156326175",
-      appId: "1:492156326175:web:14175badae2bbaada0e02a"
+      apiKey: "AIzaSyCRrDn3p9alXlLjZN7SoBkJSodcSk2uZs8",
+      authDomain: "rolling-crowdsourcing.firebaseapp.com",
+      projectId: "rolling-crowdsourcing",
+      storageBucket: "rolling-crowdsourcing.firebasestorage.app",
+      messagingSenderId: "831997390366",
+      appId: "1:831997390366:web:a86f5223fa22cc250b480f",
+      measurementId: "G-77E7560XRX"
     };
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -56,4 +60,5 @@
     });
   </script>
 </body>
+
 </html>
