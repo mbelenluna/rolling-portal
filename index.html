@@ -1,57 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login - Rolling Translations</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crowdsourcing Portal — Login | Rolling Translations</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-    <div class="container">
-        <img src="images/logo.png" alt="Rolling Translations Logo" class="logo">
-        <h1>Login</h1>
-        <form id="loginForm">
-            <label for="email">Email</label>
-            <input type="email" id="email" required />
+  <div class="ribbon">
+    Crowdsourced Translation — separate, opt‑in service for <b>non‑regulated, low‑risk content</b>.
+    <a href="/professional" class="link">Need medical/legal? Professional Services →</a>
+  </div>
+  <div class="container">
+    <img src="images/logo.png" alt="Rolling Translations Logo" class="logo" />
+    <h1 class="title">Sign in</h1>
+    <p class="subtitle">Fast, scalable, human‑powered translations. Not for regulated content.</p>
 
-            <label for="password">Password</label>
-            <input type="password" id="password" required />
+    <form id="loginForm" class="card">
+      <label for="email">Email</label>
+      <input type="email" id="email" required />
 
-            <button type="submit">Login</button>
-        </form>
-        <p><a href="register.html">Create an account</a> | <a href="reset.html">Forgot password?</a></p>
-    </div>
+      <label for="password">Password</label>
+      <input type="password" id="password" required />
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js";
-        import { getFirestore, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+      <button type="submit" class="btn primary">Login</button>
+    </form>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBYjq_CaTEfFhfTChfJ6SnXSbgIzbbRHHc",
-            authDomain: "rollingtranslationsportal.firebaseapp.com",
-            projectId: "rollingtranslationsportal",
-            storageBucket: "rollingtranslationsportal.firebasestorage.app",
-            messagingSenderId: "492156326175",
-            appId: "1:492156326175:web:14175badae2bbaada0e02a"
-        };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
+    <p class="muted"><a href="register.html">Create an account</a> · <a href="reset.html">Forgot password?</a></p>
+  </div>
 
-        const loginForm = document.getElementById("loginForm");
-        loginForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            const email = loginForm.email.value;
-            const password = loginForm.password.value;
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
 
-            signInWithEmailAndPassword(auth, email, password)
-                .then(() => window.location.href = "dashboard.html")
-                .catch((error) => alert(error.message));
-        });
-    </script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBYjq_CaTEfFhfTChfJ6SnXSbgIzbbRHHc",
+      authDomain: "rollingtranslationsportal.firebaseapp.com",
+      projectId: "rollingtranslationsportal",
+      storageBucket: "rollingtranslationsportal.firebasestorage.app",
+      messagingSenderId: "492156326175",
+      appId: "1:492156326175:web:14175badae2bbaada0e02a"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const form = document.getElementById("loginForm");
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const email = form.email.value;
+      const password = form.password.value;
+      signInWithEmailAndPassword(auth, email, password)
+        .then(() => (window.location.href = "dashboard.html"))
+        .catch((err) => alert(err.message));
+    });
+  </script>
 </body>
-
 </html>

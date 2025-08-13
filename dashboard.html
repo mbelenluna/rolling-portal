@@ -1,264 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rolling Translations Client Portal</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crowdsourcing Portal — New Request | Rolling Translations</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 </head>
-
 <body>
-    <div class="container">
-        <img src="images/logo.png" alt="Rolling Translations Logo" class="logo" />
-        <h1>Submit Translation Request</h1>
-        <p class="description">
-            Use this secure form to upload documents for translation. Rolling Translations provides HIPAA-compliant
-            services with fast turnaround times, including 24/7 support for urgent medical content.
-        </p>
-        <form id="projectRequestForm">
-            <label for="sourceLang">Source Language (*)</label>
-            <p class="instruction">To select multiple languages, hold your ctrl (Control) key while selecting all
-                languages.</p>
-            <select class="languages-box" id="sourceLang" name="sourceLang" multiple required>
-                <option value="">-- Select --</option>
-                <option value="sq">Albanian</option>
-                <option value="ar">Arabic</option>
-                <option value="hy">Armenian</option>
-                <option value="id">Bahasa Indonesian</option>
-                <option value="ms">Bahasa Malaysian</option>
-                <option value="bn">Bengali</option>
-                <option value="my">Burmese</option>
-                <option value="km">Cambodian</option>
-                <option value="ca">Catalan</option>
-                <option value="cs">Czech</option>
-                <option value="dr">Dari</option>
-                <option value="nl">Dutch</option>
-                <option value="en">English</option>
-                <option value="fa">Farsi</option>
-                <option value="fi">Finnish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="el">Greek</option>
-                <option value="he">Hebrew</option>
-                <option value="hi">Hindi</option>
-                <option value="ja">Japanese</option>
-                <option value="ko">Korean</option>
-                <option value="lo">Lao</option>
-                <option value="pt">Portuguese</option>
-                <option value="pa">Punjabi</option>
-                <option value="ro">Romanian</option>
-                <option value="ru">Russian</option>
-                <option value="szh">Simplified Chinese</option>
-                <option value="es">Spanish</option>
-                <option value="sw">Swahili</option>
-                <option value="sv">Swedish</option>
-                <option value="tl">Tagalog</option>
-                <option value="th">Thai</option>
-                <option value="tzh">Traditional Chinese</option>
-                <option value="tr">Turkish</option>
-                <option value="ur">Urdu</option>
-                <option value="vi">Vietnamese</option>
-            </select>
+  <div class="ribbon">
+    Crowdsourced Translation — separate, opt‑in service for <b>non‑regulated, low‑risk content</b>.
+    <a href="/professional" class="link">Need medical/legal? Professional Services →</a>
+  </div>
 
-            <label for="targetLang">Target Language (*)</label>
-            <p class="instruction">To select multiple languages, hold your ctrl (Control) key while selecting all
-                languages.</p>
-            <select class="languages-box" id="targetLang" name="targetLang" multiple required>
-                <option value="">-- Select --</option>
-                <option value="sq">Albanian</option>
-                <option value="ar">Arabic</option>
-                <option value="hy">Armenian</option>
-                <option value="id">Bahasa Indonesian</option>
-                <option value="ms">Bahasa Malaysian</option>
-                <option value="bn">Bengali</option>
-                <option value="my">Burmese</option>
-                <option value="km">Cambodian</option>
-                <option value="ca">Catalan</option>
-                <option value="cs">Czech</option>
-                <option value="dr">Dari</option>
-                <option value="nl">Dutch</option>
-                <option value="en">English</option>
-                <option value="fa">Farsi</option>
-                <option value="fi">Finnish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="el">Greek</option>
-                <option value="he">Hebrew</option>
-                <option value="hi">Hindi</option>
-                <option value="ja">Japanese</option>
-                <option value="ko">Korean</option>
-                <option value="lo">Lao</option>
-                <option value="pt">Portuguese</option>
-                <option value="pa">Punjabi</option>
-                <option value="ro">Romanian</option>
-                <option value="ru">Russian</option>
-                <option value="szh">Simplified Chinese</option>
-                <option value="es">Spanish</option>
-                <option value="sw">Swahili</option>
-                <option value="sv">Swedish</option>
-                <option value="tl">Tagalog</option>
-                <option value="th">Thai</option>
-                <option value="tzh">Traditional Chinese</option>
-                <option value="tr">Turkish</option>
-                <option value="ur">Urdu</option>
-                <option value="vi">Vietnamese</option>
-            </select>
+  <div class="container">
+    <img src="images/logo.png" alt="Rolling Translations Logo" class="logo" />
+    <h1 class="title">Submit a Crowdsourced Translation</h1>
+    <p class="subtitle">
+      Upload your file, get an instant quote, and pay securely. <b>Not for medical, legal, or regulated content.</b>
+    </p>
 
-            <label for="file">Upload File (*)</label>
-            <input type="file" id="file" name="file" required />
+    <form id="projectRequestForm" class="card">
+      <div class="grid">
+        <div>
+          <label for="sourceLang">Source Language (*)</label>
+          <select id="sourceLang" required>
+            <option value="">-- Select --</option>
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="pt">Portuguese</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="it">Italian</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="zh">Chinese</option>
+          </select>
+        </div>
+        <div>
+          <label for="targetLang">Target Language (*)</label>
+          <select id="targetLang" required>
+            <option value="">-- Select --</option>
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="pt">Portuguese</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="it">Italian</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="zh">Chinese</option>
+          </select>
+        </div>
+      </div>
 
-            <label for="notes">Additional Notes</label>
-            <textarea id="notes" name="notes" rows="4"></textarea>
+      <label for="file">Upload File (*)</label>
+      <input type="file" id="file" required />
 
-            <p class="left-aligned">(*) Required fields.</p>
+      <label for="notes">Notes</label>
+      <textarea id="notes" rows="3" placeholder="Context, audience, tone, glossary links..."></textarea>
 
-            <button type="submit">Send Request</button>
-        </form>
-        <p id="confirmationMsg" style="display:none; color:green;">✅ Project request sent!</p>
-        <button id="logoutBtn">Log out</button>
-    </div>
+      <label class="checkbox">
+        <input type="checkbox" id="nonRegulated" required />
+        I confirm this content is <b>not medical, legal, governmental, or otherwise regulated</b>.
+      </label>
 
-    <iframe name="hiddenFrame" style="display:none;"></iframe>
+      <div class="quote card soft">
+        <h3>Instant Quote (beta)</h3>
+        <p class="muted">We’ll auto‑count when possible (TXT/SRT). Otherwise, enter your estimated words.</p>
 
-    <form id="spreadsheetForm" method="POST" target="hiddenFrame" style="display:none;"
-        action="https://script.google.com/macros/s/AKfycbxbU9QqHS1oyYMBZz4kdNr1YYNHAlUZLIw-NWum8pjcZ8xckfHQgm6P1Qm6pa3oEzdCKQ/exec">
-        <input name="fullname" id="fullnameField" />
-        <input name="email" id="emailField" />
-        <input name="phonenumber" id="phoneField" />
-        <input name="sourceLang" id="sourceLangField" />
-        <input name="targetLang" id="targetLangField" />
-        <input name="notes" id="notesField" />
-        <input name="fileName" id="fileNameField" />
+        <div class="grid">
+          <div>
+            <label for="estWords">Estimated words</label>
+            <input type="number" id="estWords" min="1" step="1" placeholder="e.g., 12000" />
+          </div>
+          <div>
+            <label for="tier">Applied rate</label>
+            <input type="text" id="tier" disabled placeholder="$—/word" />
+          </div>
+          <div>
+            <label for="total">Estimated total</label>
+            <input type="text" id="total" disabled placeholder="$0.00" />
+          </div>
+        </div>
+        <button type="button" id="calcBtn" class="btn">Calculate</button>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn primary">Submit & Pay</button>
+        <button type="button" id="logoutBtn" class="btn">Log out</button>
+      </div>
+      <p id="confirmationMsg" class="success" style="display:none;">✅ Request submitted! Redirecting to payment…</p>
     </form>
+  </div>
 
+  <iframe name="hiddenFrame" style="display:none;"></iframe>
+  <form id="spreadsheetForm" method="POST" target="hiddenFrame" style="display:none;"
+    action="https://script.google.com/macros/s/AKfycbxbU9QqHS1oyYMBZz4kdNr1YYNHAlUZLIw-NWum8pjcZ8xckfHQgm6P1Qm6pa3oEzdCKQ/exec">
+    <input name="fullname" id="fullnameField" />
+    <input name="email" id="emailField" />
+    <input name="phonenumber" id="phoneField" />
+    <input name="sourceLang" id="sourceLangField" />
+    <input name="targetLang" id="targetLangField" />
+    <input name="notes" id="notesField" />
+    <input name="fileName" id="fileNameField" />
+  </form>
 
-    <!-- 🔽 SCRIPTS al final del body 🔽 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js";
-        import { getFirestore, addDoc, collection, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
-
-        // ✅ Inicializar Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyBYjq_CaTEfFhfTChfJ6SnXSbgIzbbRHHc",
-            authDomain: "rollingtranslationsportal.firebaseapp.com",
-            projectId: "rollingtranslationsportal",
-            storageBucket: "rollingtranslationsportal.firebasestorage.app",
-            messagingSenderId: "492156326175",
-            appId: "1:492156326175:web:14175badae2bbaada0e02a"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const storage = getStorage(app);
-        let clientFullName = "";
-        let clientOrg = "";
-
-        // ✅ Verificar sesión
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                window.location.href = "index.html";
-                return;
-            }
-
-            const userRef = doc(db, "users", user.uid);
-            const userSnap = await getDoc(userRef);
-
-            if (userSnap.exists()) {
-                const userData = userSnap.data();
-                clientFullName = userData.fullName;
-                clientOrg = userData.org;
-            }
-        });
-
-        // ✅ Logout
-        const logoutBtn = document.getElementById("logoutBtn");
-        if (logoutBtn) {
-            logoutBtn.addEventListener("click", () => {
-                signOut(auth).then(() => {
-                    window.location.href = "index.html";
-                });
-            });
-        }
-
-        // ✅ EmailJS INIT
-        emailjs.init("NXdzFSlIax5PRevuB");
-
-        const form = document.getElementById("projectRequestForm");
-        const confirmationMsg = document.getElementById("confirmationMsg");
-
-        // ✅ Helper para múltiples valores
-        const getSelectedValues = (selectElement) => {
-            return Array.from(selectElement.selectedOptions).map(option => option.value);
-        };
-
-        // ✅ Evento de envío de formulario
-        form.addEventListener("submit", async (e) => {
-            e.preventDefault();
-
-            const sourceLangSelect = document.getElementById("sourceLang");
-            const targetLangSelect = document.getElementById("targetLang");
-            const notes = document.getElementById("notes").value;
-            const file = document.getElementById("file").files[0];
-
-            let sourceLang = getSelectedValues(sourceLangSelect);
-            let targetLang = getSelectedValues(targetLangSelect);
-
-            sourceLang = Array.isArray(sourceLang) ? sourceLang : [sourceLang];
-            targetLang = Array.isArray(targetLang) ? targetLang : [targetLang];
-
-            try {
-                // ✅ 1. Subir archivo a Firebase
-                const fileRef = ref(storage, `projects/${Date.now()}_${file.name}`);
-                await uploadBytes(fileRef, file);
-
-                // ✅ 2. Guardar en Firestore
-                await addDoc(collection(db, "projectRequests"), {
-                    sourceLang: sourceLang.join(", "),
-                    targetLang: targetLang.join(", "),
-                    notes,
-                    file: file.name,
-                    createdAt: serverTimestamp()
-                });
-
-                // ✅ 3. Enviar email
-                const email = "info@rolling-translations.com";
-                const emailResponse = await emailjs.send("service_mugdac3", "template_a6ade8h", {
-                    sourceLang: sourceLang.join(", "),
-                    targetLang: targetLang.join(", "),
-                    notes,
-                    file: file.name,
-                    email,
-                    clientFullName,
-                    clientOrg
-                });
-                console.log("✅ Email sent!", emailResponse);
-
-                document.getElementById("fullnameField").value = clientFullName;
-                document.getElementById("emailField").value = "info@rolling-translations.com";
-                document.getElementById("phoneField").value = "";
-                document.getElementById("sourceLangField").value = sourceLang.join(", ");
-                document.getElementById("targetLangField").value = targetLang.join(", ");
-                document.getElementById("notesField").value = notes;
-                document.getElementById("fileNameField").value = file.name;
-
-                document.getElementById("spreadsheetForm").submit();
-
-                form.reset();
-                confirmationMsg.style.display = "block";
-            } catch (error) {
-                alert("⚠️ Error: " + error.message);
-                console.error(error);
-            }
-        });
-
-
-    </script>
-
+  <script src="crowd.js" type="module"></script>
 </body>
-
 </html>

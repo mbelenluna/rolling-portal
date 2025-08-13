@@ -1,101 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Register - Rolling Translations</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crowdsourcing Portal — Register | Rolling Translations</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="container">
-        <img src="images/logo.png" alt="Rolling Translations Logo" class="logo" />
-        <h1>Register</h1>
-        <form id="registerForm">
-            <label for="fullName">Full Name</label>
-            <input type="text" id="fullName" required />
+  <div class="ribbon">
+    Crowdsourced Translation — separate, opt‑in service for <b>non‑regulated, low‑risk content</b>.
+    <a href="/professional" class="link">Need medical/legal? Professional Services →</a>
+  </div>
+  <div class="container">
+    <img src="images/logo.png" alt="Rolling Translations Logo" class="logo" />
+    <h1 class="title">Create your account</h1>
+    <p class="subtitle">Use this portal only for non‑regulated content.</p>
 
-            <label for="org">Organization / Clinic</label>
-            <input type="text" id="org" />
+    <form id="registerForm" class="card">
+      <label for="fullName">Full Name</label>
+      <input type="text" id="fullName" required />
 
-            <label for="phone">Phone Number</label>
-            <input type="tel" id="phone" />
+      <label for="org">Organization</label>
+      <input type="text" id="org" />
 
-            <label for="email">Email</label>
-            <input type="email" id="email" required />
+      <label for="phone">Phone</label>
+      <input type="tel" id="phone" />
 
-            <label for="password">Password</label>
-            <input type="password" id="password" required />
+      <label for="email">Email</label>
+      <input type="email" id="email" required />
 
-            <button type="submit">Register</button>
-        </form>
+      <label for="password">Password</label>
+      <input type="password" id="password" required />
 
-        <p id="successMessage" style="display:none; text-align:center; color:green; font-weight:bold;">
-            ✅ Account created! Please check your email to verify your address.
-        </p>
-        <p><a href="index.html">Already have an account?</a></p>
-    </div>
+      <button type="submit" class="btn primary">Register</button>
+    </form>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-        import {
-            getAuth,
-            createUserWithEmailAndPassword,
-            sendEmailVerification
-        } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
-        import {
-            getFirestore,
-            doc,
-            setDoc
-        } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+    <p id="successMessage" class="success" style="display:none;">✅ Account created! Check your email to verify.</p>
+    <p class="muted"><a href="index.html">Already have an account?</a></p>
+  </div>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBYjq_CaTEfFhfTChfJ6SnXSbgIzbbRHHc",
-            authDomain: "rollingtranslationsportal.firebaseapp.com",
-            projectId: "rollingtranslationsportal",
-            storageBucket: "rollingtranslationsportal.firebasestorage.app",
-            messagingSenderId: "492156326175",
-            appId: "1:492156326175:web:14175badae2bbaada0e02a"
-        };
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+    const firebaseConfig = {
+      apiKey: "AIzaSyBYjq_CaTEfFhfTChfJ6SnXSbgIzbbRHHc",
+      authDomain: "rollingtranslationsportal.firebaseapp.com",
+      projectId: "rollingtranslationsportal",
+      storageBucket: "rollingtranslationsportal.firebasestorage.app",
+      messagingSenderId: "492156326175",
+      appId: "1:492156326175:web:14175badae2bbaada0e02a"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-        const registerForm = document.getElementById("registerForm");
-        const successMessage = document.getElementById("successMessage");
+    const form = document.getElementById("registerForm");
+    const successMessage = document.getElementById("successMessage");
 
-        registerForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fullName = form.fullName.value;
+      const org = form.org.value;
+      const phone = form.phone.value;
+      const email = form.email.value;
+      const password = form.password.value;
 
-            const fullName = document.getElementById("fullName").value;
-            const org = document.getElementById("org").value;
-            const phone = document.getElementById("phone").value;
-            const email = document.getElementById("email").value;
-            const password = document.getElementById("password").value;
-
-            try {
-                // Crear usuario en Firebase Auth
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
-
-                // Guardar datos adicionales en Firestore
-                await setDoc(doc(db, "users", user.uid), {
-                    fullName,
-                    org,
-                    phone,
-                    email
-                });
-
-                // Enviar email de verificación
-                await sendEmailVerification(user);
-
-                // Mostrar mensaje de éxito
-                registerForm.style.display = "none";
-                successMessage.style.display = "block";
-            } catch (error) {
-                alert("⚠️ " + error.message);
-            }
-        });
-    </script>
+      try {
+        const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, "users", user.uid), { fullName, org, phone, email });
+        await sendEmailVerification(user);
+        form.style.display = "none";
+        successMessage.style.display = "block";
+      } catch (err) {
+        alert("⚠️ " + err.message);
+      }
+    });
+  </script>
 </body>
 </html>
