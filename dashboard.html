@@ -117,7 +117,6 @@
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
     import { getFirestore, addDoc, collection, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js";
-    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-functions.js";
     // Optional analytics:
     // import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-analytics.js";
 
@@ -137,8 +136,6 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
     const storage = getStorage(app);
-    const functions = getFunctions(app); // si tu función está en otra región: getFunctions(app, "us-central1")
-    const getQuoteForFile = httpsCallable(functions, "getQuoteForFile");
     // const analytics = getAnalytics(app);
 
     // EmailJS
@@ -213,19 +210,26 @@
         const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
         const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
         await uploadBytes(fileRef, file, {
-          contentType: file.type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          contentType: file.type || "application/octet-stream"
         });
-        // const downloadURL = await getDownloadURL(fileRef);
+
+        // (Opcional) intento de URL pública (si tus rules read ya están OK)
+        let downloadURL = null;
+        try { downloadURL = await getDownloadURL(fileRef); } catch { downloadURL = null; }
+
         const gsPath = `crowd/uploads/${user.uid}/${safeName}`;
-        const downloadURL = null;
         uploaded = { gsPath, safeName, downloadURL };
 
-        // 2) Llamar a la función para contar palabras
-        const resp = await getQuoteForFile({ gsPath });
-        const data = resp?.data || {};
+        // 2) Llamar a la función HTTP para contar palabras (CORS v2)
+        const quoteResp = await fetch("https://us-central1-rolling-crowdsourcing.cloudfunctions.net/getQuoteForFile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gsPath, uid: user.uid })
+        });
+        if (!quoteResp.ok) throw new Error(`HTTP ${quoteResp.status}`);
+        const q = await quoteResp.json();
 
-        if (data.scanned) {
-          // PDF escaneado sin texto — pedimos estimado manual
+        if (q.scanned) {
           estWordsEl.value = "";
           tierEl.value = "";
           totalEl.value = "";
@@ -233,9 +237,9 @@
           return;
         }
 
-        const words = Number(data.words || 0);
-        const rate = Number(data.rate || rateForWords(words));
-        const total = Number(data.total || (words * rate));
+        const words = Number(q.words || 0);
+        const rate = Number(q.rate ?? rateForWords(words));
+        const total = Number(q.total ?? (words * rate));
 
         estWordsEl.value = words > 0 ? String(words) : "";
         tierEl.value = `$${rate.toFixed(2)}/word`;
@@ -290,11 +294,7 @@
         await uploadBytes(fileRef, file, {
           contentType: file.type || "application/octet-stream"
         });
-        try {
-          downloadURL = await getDownloadURL(fileRef); // si tus rules de read ya están OK
-        } catch {
-          downloadURL = null; // no bloqueamos si aún no querés leer URL
-        }
+        try { downloadURL = await getDownloadURL(fileRef); } catch { downloadURL = null; }
         fileName = file.name;
         filePath = `crowd/uploads/${user.uid}/${safeName}`;
       }
@@ -320,10 +320,7 @@
         }
         if (wordsFromFn > 0) estWordsEl.value = String(wordsFromFn);
         if (rateFromFn != null) tierEl.value = `$${rateFromFn.toFixed(2)}/word`;
-        if (totalFromFn != null) {
-          const formatUSD = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-          totalEl.value = formatUSD(totalFromFn);
-        }
+        if (totalFromFn != null) totalEl.value = formatUSD(totalFromFn);
       } catch (err) {
         console.warn("Quote function error:", err?.message || err);
         // No bloqueamos: el usuario puede ingresar words manualmente
@@ -402,8 +399,8 @@
         alert("⚠️ Error: " + (error?.message || error));
       }
     });
-
   </script>
+
 
 
 </body>
