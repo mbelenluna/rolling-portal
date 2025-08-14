@@ -1,154 +1,66 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+const functions = require("firebase-functions");
+const cors = require("cors")({ origin: true });
 
-const { setGlobalOptions } = require("firebase-functions");
-const { onRequest } = require("firebase-functions/https");
-const logger = require("firebase-functions/logger");
-import * as admin from "firebase-admin";
-import * as functions from "firebase-functions";
-import pdf from "pdf-parse";
-import mammoth from "mammoth";
-import xlsx from "xlsx";
-import { fileTypeFromBuffer } from "file-type";
+// Asegúrate de tener inicializado admin y bucket antes:
+const admin = require("firebase-admin");
+const { Storage } = require("@google-cloud/storage");
+const storage = new Storage();
+const bucket = storage.bucket("rolling-crowdsourcing.appspot.com");
 
-admin.initializeApp();
-const db = admin.firestore();
-const bucket = admin.storage().bucket();
+// Aquí van tus helpers
+// const extractTextFromBuffer = ...
+// const countWordsGeneric = ...
+// const rateForWords = ...
 
-// --- helpers ---
-function countWordsGeneric(text) {
-    if (!text) return 0;
-    // Heuristic: count CJK chars as words; otherwise split on word-ish tokens
-    const cjk = (text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) || []).length;
-    const latin = (text.replace(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu, ""))
-        .trim()
-        .match(/[A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:['’-][A-Za-z0-9]+)*/g);
-    return cjk + (latin ? latin.length : 0);
-}
-
-function rateForWords(words) {
-    if (words >= 300000) return 0.05;
-    if (words >= 100000) return 0.06;
-    if (words >= 10000) return 0.07;
-    if (words >= 1000) return 0.09;
-    return 0.10;
-}
-
-async function extractTextFromBuffer(buf, filename = "") {
-    const ft = await fileTypeFromBuffer(buf);
-    const mime = ft?.mime || "";
-
-    // Quick routes by mime/extension
-    const ext = (filename.split(".").pop() || "").toLowerCase();
-
-    // Plain text / csv / json / srt / vtt
-    if (mime.startsWith("text/") || ["txt", "csv", "srt", "vtt", "md", "html", "json"].includes(ext)) {
-        let text = buf.toString("utf8");
-        if (ext === "json") {
+exports.getQuoteForFile = functions
+    .region("us-central1")
+    .https.onRequest((req, res) => {
+        cors(req, res, async () => {
             try {
-                const obj = JSON.parse(text);
-                text = JSON.stringify(obj); // flatten; you can cherry-pick keys if needed
-            } catch { }
-        }
-        if (ext === "srt" || ext === "vtt") {
-            text = text.replace(/\d{2}:\d{2}:\d{2}[,\.]\d{3} --> .+\n/g, ""); // drop timestamps
-        }
-        return text;
-    }
+                // Validar método
+                if (req.method !== "POST") {
+                    return res.status(405).send("Method Not Allowed");
+                }
 
-    // PDF (text-based; scans will return little/none)
-    if (mime === "application/pdf" || ext === "pdf") {
-        const data = await pdf(buf);
-        return data.text || "";
-    }
+                const { gsPath, uid } = req.body || {};
 
-    // DOCX
-    if (ext === "docx" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-        const { value } = await mammoth.extractRawText({ buffer: buf });
-        return value || "";
-    }
+                if (!gsPath || typeof gsPath !== "string") {
+                    return res.status(400).send("Missing gsPath.");
+                }
+                if (!uid || !gsPath.startsWith(`crowd/uploads/${uid}/`)) {
+                    return res.status(403).send("Forbidden path.");
+                }
 
-    // XLS/XLSX
-    if (["xlsx", "xls"].includes(ext) || mime.includes("spreadsheetml") || mime.includes("ms-excel")) {
-        const wb = xlsx.read(buf, { type: "buffer" });
-        let text = "";
-        for (const sheetName of wb.SheetNames) {
-            const sheet = wb.Sheets[sheetName];
-            const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false });
-            for (const row of rows) text += " " + row.filter(Boolean).join(" ");
-        }
-        return text;
-    }
+                const file = bucket.file(gsPath);
+                const [buf] = await file.download();
 
-    // Unsupported legacy .doc: recommend resaving as .docx
-    if (ext === "doc") {
-        return ""; // we’ll treat as 0 and ask user to upload DOCX/PDF/TXT
-    }
+                const text = await extractTextFromBuffer(buf, gsPath);
+                let words = countWordsGeneric(text);
 
-    // Fallback: try utf8
-    return buf.toString("utf8");
-}
+                const scanned = words < 10 && gsPath.toLowerCase().endsWith(".pdf");
+                if (scanned) {
+                    return res.json({
+                        words: 0,
+                        scanned: true,
+                        rate: null,
+                        total: null,
+                        note: "Likely scanned PDF (requires OCR)."
+                    });
+                }
 
-// === Callable function: getQuoteForFile ===
-// data: { gsPath: "crowd/uploads/<uid>/<file>", langPair?: "en>es" }
-export const getQuoteForFile = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Sign in required.");
-    }
-    const gsPath = data?.gsPath;
-    if (!gsPath || typeof gsPath !== "string") {
-        throw new functions.https.HttpsError("invalid-argument", "Missing gsPath.");
-    }
+                const rate = rateForWords(words);
+                const total = Math.round(words * rate * 100) / 100;
 
-    // security: only allow access to own path
-    const uid = context.auth.uid;
-    if (!gsPath.startsWith(`crowd/uploads/${uid}/`)) {
-        throw new functions.https.HttpsError("permission-denied", "Forbidden path.");
-    }
+                return res.json({
+                    words,
+                    rate,
+                    total,
+                    currency: "USD"
+                });
 
-    // download from Storage
-    const file = bucket.file(gsPath);
-    const [buf] = await file.download();
-
-    // extract & count
-    const text = await extractTextFromBuffer(buf, gsPath);
-    let words = countWordsGeneric(text);
-
-    // if it looks like a scanned PDF (very few chars), ask for estimate
-    const scanned = words < 10 && gsPath.toLowerCase().endsWith(".pdf");
-    if (scanned) {
-        return { words: 0, scanned: true, rate: null, total: null, note: "PDF appears to be a scan (OCR required)." };
-    }
-
-    // quote
-    const rate = rateForWords(words);
-    const total = Math.round(words * rate * 100) / 100;
-
-    return { words, rate, total, currency: "USD" };
-});
-
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
-
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
-
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+            } catch (err) {
+                console.error("getQuoteForFile error:", err);
+                res.status(500).send(err.message || "Internal Server Error");
+            }
+        });
+    });

@@ -264,10 +264,13 @@
       const sourceLang = document.getElementById("sourceLang").value;
       const targetLang = document.getElementById("targetLang").value;
       const notes = document.getElementById("notes").value;
-      const estWords = parseInt(estWordsEl?.value || "0", 10) || null;
-
       const user = auth.currentUser;
       if (!user) { alert("Session expired. Please sign in again."); return; }
+
+      // Campos de la UI del quote
+      const estWordsEl = document.getElementById("estWords");
+      const tierEl = document.getElementById("tier");
+      const totalEl = document.getElementById("total");
 
       let fileName = null;
       let filePath = null;
@@ -277,21 +280,61 @@
       if (uploaded?.gsPath) {
         fileName = uploaded.safeName;
         filePath = uploaded.gsPath;
-        downloadURL = uploaded.downloadURL;
+        downloadURL = uploaded.downloadURL || null;
       } else {
-        // (Fallback) si por alguna razón no hay upload previo, subimos ahora:
+        // Fallback: subir ahora
         const file = fileInput.files[0];
         if (!file) { alert("Please select a file."); return; }
         const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
         const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
-        await uploadBytes(fileRef, file);
-        downloadURL = await getDownloadURL(fileRef);
+        await uploadBytes(fileRef, file, {
+          contentType: file.type || "application/octet-stream"
+        });
+        try {
+          downloadURL = await getDownloadURL(fileRef); // si tus rules de read ya están OK
+        } catch {
+          downloadURL = null; // no bloqueamos si aún no querés leer URL
+        }
         fileName = file.name;
         filePath = `crowd/uploads/${user.uid}/${safeName}`;
       }
 
+      // === 1) Llamar a la función HTTP para cotizar (CORS habilitado) ===
+      let wordsFromFn = null, rateFromFn = null, totalFromFn = null, scanned = false;
       try {
-        // 1) Crear payload
+        const quoteResp = await fetch("https://us-central1-rolling-crowdsourcing.cloudfunctions.net/getQuoteForFile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gsPath: filePath, uid: user.uid })
+        });
+        if (!quoteResp.ok) throw new Error(`HTTP ${quoteResp.status}`);
+        const q = await quoteResp.json();
+        wordsFromFn = Number(q.words ?? 0);
+        rateFromFn = q.rate != null ? Number(q.rate) : null;
+        totalFromFn = q.total != null ? Number(q.total) : null;
+        scanned = Boolean(q.scanned);
+
+        // Actualizar UI si la función devolvió datos
+        if (scanned) {
+          alert("We detected a scanned PDF. Please provide an estimated word count or upload a text-based file.");
+        }
+        if (wordsFromFn > 0) estWordsEl.value = String(wordsFromFn);
+        if (rateFromFn != null) tierEl.value = `$${rateFromFn.toFixed(2)}/word`;
+        if (totalFromFn != null) {
+          const formatUSD = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+          totalEl.value = formatUSD(totalFromFn);
+        }
+      } catch (err) {
+        console.warn("Quote function error:", err?.message || err);
+        // No bloqueamos: el usuario puede ingresar words manualmente
+      }
+
+      // Determinar palabras finales para guardar
+      const estWordsManual = parseInt(estWordsEl?.value || "0", 10) || null;
+      const estWordsFinal = wordsFromFn && wordsFromFn > 0 ? wordsFromFn : estWordsManual;
+
+      try {
+        // === 2) Crear payload y guardar en Firestore ===
         const payload = {
           email: clientEmail,
           fullName: clientFullName,
@@ -301,17 +344,19 @@
           notes,
           fileName,
           filePath,
-          estWords,
+          estWords: estWordsFinal,
           nonRegulated: true,
           status: "pending_payment",
           createdAt: serverTimestamp()
         };
-        if (downloadURL) payload.downloadURL = downloadURL; // solo si existe
+        if (downloadURL) payload.downloadURL = downloadURL;
+        if (rateFromFn != null) payload.rate = rateFromFn;
+        if (totalFromFn != null) payload.estimatedTotal = totalFromFn;
+        if (scanned) payload.scanDetected = true;
 
-        // 2) Guardar en Firestore
         const reqRef = await addDoc(collection(db, "crowdRequests"), payload);
 
-        // 3) EmailJS (no bloqueante)
+        // === 3) EmailJS (no bloqueante) ===
         try {
           await emailjs.send("service_mugdac3", "template_a6ade8h", {
             sourceLang, targetLang, notes,
@@ -321,7 +366,7 @@
           });
         } catch (e) { console.warn("EmailJS:", e?.message || e); }
 
-        // 4) Apps Script (opcional)
+        // === 4) Apps Script (opcional) ===
         try {
           document.getElementById("fullnameField").value = clientFullName;
           document.getElementById("emailField").value = clientEmail || "info@rolling-translations.com";
@@ -333,14 +378,14 @@
           document.getElementById("spreadsheetForm").submit();
         } catch (e) { console.warn("Apps Script:", e?.message || e); }
 
-        // 5) UI
+        // === 5) UI ===
         confirmationMsg.style.display = "block";
 
-        // 6) TODO: Stripe Checkout
+        // === 6) TODO: Stripe Checkout ===
         // const resp = await fetch("/api/checkout", {
         //   method: "POST",
         //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify({ requestId: reqRef.id, estWords })
+        //   body: JSON.stringify({ requestId: reqRef.id, estWords: estWordsFinal })
         // });
         // const { url } = await resp.json();
         // window.location.href = url;
