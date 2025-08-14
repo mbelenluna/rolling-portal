@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,6 +8,25 @@
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <link rel="icon" href="data:,">
+
+  <!-- Spinner minimal -->
+  <style>
+    #quoteStatus {
+      display: none;
+      align-items: center;
+      gap: .5rem;
+    }
+    #quoteStatus::before {
+      content: "";
+      width: 0.9em; height: 0.9em;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 
 <body>
@@ -59,7 +77,7 @@
         </div>
       </div>
 
-      <!-- ⬇️ CAMBIO: multiple -->
+      <!-- multiple -->
       <label for="files">Upload File(s) (*)</label>
       <input type="file" id="files" multiple required />
 
@@ -73,6 +91,10 @@
 
       <div class="quote card soft">
         <h3>Instant Quote (beta)</h3>
+
+        <!-- status de carga -->
+        <div id="quoteStatus" class="muted" role="status" aria-live="polite" style="display:none;">Loading…</div>
+
         <p class="muted">We’ll auto-count when possible. Otherwise, enter your estimated words.</p>
 
         <div class="grid">
@@ -171,7 +193,11 @@
     const totalEl = document.getElementById("total");
     const calcBtn = document.getElementById("calcBtn");
     const filesInput = document.getElementById("files");
+    const submitBtn = document.querySelector('button[type="submit"]');
     const MIN_TOTAL_USD = 1.00;
+
+    // Para evitar resultados fuera de orden si el usuario cambia rápido
+    let quoteRunId = 0;
 
     function rateForWords(w) {
       if (w >= 1000000) return 0.04;
@@ -185,14 +211,6 @@
     function formatUSD(n) {
       return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
     }
-    function computeQuote(totalWords) {
-      const w = Number(totalWords || 0);
-      const rate = rateForWords(w);
-      const raw = w * rate;
-      const total = Math.max(raw, MIN_TOTAL_USD);
-      const appliedMinimum = w > 0 && raw < MIN_TOTAL_USD;
-      return { rate, total, appliedMinimum };
-    }
     function updateUIFromWords(totalWords, rateOverride = null) {
       const w = Number(totalWords || 0);
       const rate = (rateOverride != null) ? Number(rateOverride) : rateForWords(w);
@@ -203,7 +221,6 @@
       totalEl.value = formatUSD(total) + (showMin ? " (min)" : "");
       return { rate, total };
     }
-
     function recalc() {
       const w = parseInt(estWordsEl?.value || "0", 10);
       if (!w || w <= 0) { tierEl.value = ""; totalEl.value = ""; return; }
@@ -212,8 +229,33 @@
     calcBtn?.addEventListener("click", recalc);
     estWordsEl?.addEventListener("input", recalc);
 
+    // ===== Helpers de loading =====
+    function setQuoteLoading(isLoading, message = "Loading…") {
+      const s = document.getElementById("quoteStatus");
+      if (!s) return;
+      if (isLoading) {
+        s.textContent = message;
+        s.style.display = "inline-flex";
+        s.setAttribute("aria-busy", "true");
+        calcBtn.disabled = true;
+        filesInput.disabled = true;
+        if (submitBtn) submitBtn.disabled = true;
+        tierEl.value = "Loading…";
+        totalEl.value = "Loading…";
+      } else {
+        s.textContent = "";
+        s.style.display = "none";
+        s.removeAttribute("aria-busy");
+        calcBtn.disabled = false;
+        filesInput.disabled = false;
+        if (submitBtn) submitBtn.disabled = false;
+        if (tierEl.value === "Loading…") tierEl.value = "";
+        if (totalEl.value === "Loading…") totalEl.value = "";
+      }
+    }
+
     // ===== Estado de uploads múltiples =====
-    // Estructura: [{ fileName, filePath, downloadURL, words }]
+    // Estructura: [{ fileName, filePath, downloadURL, words, scanned }]
     let uploadedFiles = [];
 
     async function uploadAndCountOne(file, user) {
@@ -236,7 +278,6 @@
       const q = await quoteResp.json();
 
       if (q.scanned) {
-        // Devolvemos objeto marcado como escaneado y 0 palabras
         return { fileName: file.name, filePath: gsPath, downloadURL, words: 0, scanned: true };
       }
 
@@ -249,29 +290,33 @@
       const files = Array.from(e.target.files || []);
       if (!files.length) return;
 
+      const myRun = ++quoteRunId;
+      setQuoteLoading(true, "Uploading & counting…");
+
       try {
         const user = auth.currentUser;
-        if (!user) { alert("Session expired. Please sign in again."); return; }
+        if (!user) { setQuoteLoading(false); alert("Session expired. Please sign in again."); return; }
 
-        // Subimos y contamos todos (secuencial o Promise.all; uso Promise.all para velocidad)
         const results = await Promise.all(files.map(f => uploadAndCountOne(f, user)));
+
+        if (myRun !== quoteRunId) return; // llegó otra corrida más nueva
+
         uploadedFiles = results;
 
-        // Avisar si alguno fue "scanned"
         if (results.some(r => r.scanned)) {
           alert("We detected one or more scanned PDFs. Please provide an estimated word count for those or upload text-based files.");
         }
 
-        // Sumar palabras totales (los escaneados aportan 0 aquí)
         const totalWords = results.reduce((sum, r) => sum + (Number(r.words) || 0), 0);
-
-        // Reflejar en UI
         estWordsEl.value = totalWords > 0 ? String(totalWords) : "";
         updateUIFromWords(totalWords);
+
       } catch (err) {
         console.error(err);
         alert("Could not auto-count some files. You can still enter a total estimate manually.");
-        uploadedFiles = []; // reset si falla
+        uploadedFiles = [];
+      } finally {
+        if (myRun === quoteRunId) setQuoteLoading(false);
       }
     });
 
@@ -294,12 +339,15 @@
       const user = auth.currentUser;
       if (!user) { alert("Session expired. Please sign in again."); return; }
 
-      // Si el usuario pegó archivos pero no subimos (por ejemplo, reingresó), subimos ahora:
+      // Si el usuario pegó archivos pero no subimos aún (reingreso), subimos ahora:
       if (!uploadedFiles.length) {
         const files = Array.from(filesInput.files || []);
         if (!files.length) { alert("Please select at least one file."); return; }
+        setQuoteLoading(true, "Uploading & counting…");
+        const myRun = ++quoteRunId;
         try {
           const results = await Promise.all(files.map(f => uploadAndCountOne(f, user)));
+          if (myRun !== quoteRunId) return;
           uploadedFiles = results;
           if (results.some(r => r.scanned)) {
             alert("We detected one or more scanned PDFs. Please provide an estimated word count for those or upload text-based files.");
@@ -307,21 +355,20 @@
         } catch (err) {
           console.warn("Upload/count on submit failed:", err?.message || err);
           alert("We couldn't process the files. Please try again.");
+          setQuoteLoading(false);
           return;
+        } finally {
+          if (myRun === quoteRunId) setQuoteLoading(false);
         }
       }
 
-      // Palabras totales (conteo real) + posibilidad de override manual
       const countedWords = uploadedFiles.reduce((sum, r) => sum + (Number(r.words) || 0), 0);
       const estWordsManual = parseInt(estWordsEl?.value || "0", 10) || 0;
-      // Si el usuario corrigió manualmente (p.ej. por archivos escaneados), tomamos ese total:
       const totalWords = estWordsManual > 0 ? estWordsManual : countedWords;
 
-      // Calcular rate/total finales por totalWords (mínimo $1)
       const { rate: rateFinal, total: totalFinal } = updateUIFromWords(totalWords);
 
       try {
-        // === Guardar en Firestore ===
         const payload = {
           email: clientEmail,
           fullName: clientFullName,
@@ -344,7 +391,6 @@
           createdAt: serverTimestamp()
         };
 
-        // Para compatibilidad con tu Apps Script (un solo campo fileName), mandamos listado simple:
         const listNames = uploadedFiles.map(f => f.fileName).join(", ");
         document.getElementById("fullnameField").value = clientFullName;
         document.getElementById("emailField").value = clientEmail || "info@rolling-translations.com";
@@ -356,7 +402,6 @@
 
         const reqRef = await addDoc(collection(db, "crowdRequests"), payload);
 
-        // === EmailJS (no bloqueante) ===
         try {
           await emailjs.send("service_mugdac3", "template_a6ade8h", {
             sourceLang, targetLang, notes,
@@ -366,10 +411,8 @@
           });
         } catch (e) { console.warn("EmailJS:", e?.message || e); }
 
-        // === Apps Script (opcional) ===
         try { document.getElementById("spreadsheetForm").submit(); } catch (e) { console.warn("Apps Script:", e?.message || e); }
 
-        // === UI ===
         confirmationMsg.style.display = "block";
 
         // TODO: Stripe Checkout (con totalWords)
@@ -395,5 +438,4 @@
     });
   </script>
 </body>
-
 </html>
