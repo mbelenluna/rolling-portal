@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,8 +9,9 @@
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 </head>
+
 <body>
-  
+
   <div class="ribbon">
     Crowdsourced Translation — separate, opt‑in service for <b>non‑regulated, low‑risk content</b>.
     <a href="/professional" class="link">Need medical/legal? Professional Services →</a>
@@ -109,202 +111,248 @@
   </form>
 
   <script type="module">
-  // ===== Firebase CDN imports =====
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-  import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-  import { getFirestore, addDoc, collection, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
-  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js";
-  // Optional analytics:
-  // import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-analytics.js";
+    // ===== Firebase CDN imports =====
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
+    import { getFirestore, addDoc, collection, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js";
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-functions.js";
+    // Optional analytics:
+    // import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-analytics.js";
 
-  // ===== Firebase config (your new project) =====
-  const firebaseConfig = {
-    apiKey: "AIzaSyCRrDn3p9alXlLjZN7SoBkJSodcSk2uZs8",
-    authDomain: "rolling-crowdsourcing.firebaseapp.com",
-    projectId: "rolling-crowdsourcing",
-    storageBucket: "rolling-crowdsourcing.appspot.com",
-    messagingSenderId: "831997390366",
-    appId: "1:831997390366:web:a86f5223fa22cc250b480f",
-    measurementId: "G-77E7560XRX"
-  };
+    // ===== Firebase config (nuevo proyecto) =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyCRrDn3p9alXlLjZN7SoBkJSodcSk2uZs8",
+      authDomain: "rolling-crowdsourcing.firebaseapp.com",
+      projectId: "rolling-crowdsourcing",
+      storageBucket: "rolling-crowdsourcing.appspot.com",
+      messagingSenderId: "831997390366",
+      appId: "1:831997390366:web:a86f5223fa22cc250b480f",
+      measurementId: "G-77E7560XRX"
+    };
 
-  // ===== Init Firebase =====
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const storage = getStorage(app);
-  // const analytics = getAnalytics(app); // if you enabled Analytics
+    // ===== Init Firebase =====
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+    const functions = getFunctions(app); // si tu función está en otra región: getFunctions(app, "us-central1")
+    const getQuoteForFile = httpsCallable(functions, "getQuoteForFile");
+    // const analytics = getAnalytics(app);
 
+    // EmailJS
+    emailjs.init("NXdzFSlIax5PRevuB");
 
-  emailjs.init("NXdzFSlIax5PRevuB");
+    // ===== Auth guard =====
+    let clientFullName = "";
+    let clientOrg = "";
+    let clientEmail = "";
 
-  // ===== Auth guard =====
-  let clientFullName = "";
-  let clientOrg = "";
-  let clientEmail = "";
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      clientEmail = user.email || "";
 
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) { window.location.href = "index.html"; return; }
-    clientEmail = user.email || "";
-
-    // Load profile
-    const userRef = doc(db, "users", user.uid);
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      const u = snap.data();
-      clientFullName = u.fullName || "";
-      clientOrg = u.org || "";
-    }
-  });
-
-  // ===== Logout =====
-  const logoutBtn = document.getElementById("logoutBtn");
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      signOut(auth).then(() => (window.location.href = "index.html"));
+      const userRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userRef);
+      if (snap.exists()) {
+        const u = snap.data();
+        clientFullName = u.fullName || "";
+        clientOrg = u.org || "";
+      }
     });
-  }
 
-  // ===== Instant Quote (beta) =====
-  const estWordsEl = document.getElementById("estWords");
-  const tierEl = document.getElementById("tier");
-  const totalEl = document.getElementById("total");
-  const calcBtn = document.getElementById("calcBtn");
-
-  function rateForWords(w) {
-    if (w >= 300000) return 0.05; // enterprise floor example
-    if (w >= 100000) return 0.06;
-    if (w >= 10000)  return 0.07;
-    if (w >= 1000)   return 0.09;
-    return 0.10;
-  }
-  function formatUSD(n) {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-  }
-  function recalc() {
-    const w = parseInt(estWordsEl?.value || "0", 10);
-    if (!w || w <= 0) { tierEl.value = ""; totalEl.value = ""; return; }
-    const rate = rateForWords(w);
-    tierEl.value = `$${rate.toFixed(2)}/word`;
-    totalEl.value = formatUSD(w * rate);
-  }
-  calcBtn?.addEventListener("click", recalc);
-  estWordsEl?.addEventListener("input", recalc);
-
-  // ===== Submit & Pay flow =====
-  const form = document.getElementById("projectRequestForm");
-  const confirmationMsg = document.getElementById("confirmationMsg");
-
-  // Helper for multi-selects if you use them later
-  const getSelectedValues = (selectEl) =>
-    Array.from(selectEl.selectedOptions || []).map(o => o.value);
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    // Validate non-regulated checkbox
-    const nonReg = document.getElementById("nonRegulated");
-    if (!nonReg?.checked) {
-      alert("Please confirm this is non-regulated content.");
-      return;
+    // ===== Logout =====
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        signOut(auth).then(() => (window.location.href = "index.html"));
+      });
     }
 
-    // Gather fields
-    const sourceLang = document.getElementById("sourceLang").value;
-    const targetLang = document.getElementById("targetLang").value;
-    const notes = document.getElementById("notes").value;
-    const file = document.getElementById("file").files[0];
-    const estWords = parseInt(estWordsEl?.value || "0", 10) || null;
+    // ===== Instant Quote (beta) =====
+    const estWordsEl = document.getElementById("estWords");
+    const tierEl = document.getElementById("tier");
+    const totalEl = document.getElementById("total");
+    const calcBtn = document.getElementById("calcBtn");
+    const fileInput = document.getElementById("file");
 
-    if (!file) { alert("Please select a file."); return; }
+    function rateForWords(w) {
+      if (w >= 300000) return 0.05;
+      if (w >= 100000) return 0.06;
+      if (w >= 10000) return 0.07;
+      if (w >= 1000) return 0.09;
+      return 0.10;
+    }
+    function formatUSD(n) {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+    }
+    function recalc() {
+      const w = parseInt(estWordsEl?.value || "0", 10);
+      if (!w || w <= 0) { tierEl.value = ""; totalEl.value = ""; return; }
+      const rate = rateForWords(w);
+      tierEl.value = `$${rate.toFixed(2)}/word`;
+      totalEl.value = formatUSD(w * rate);
+    }
+    calcBtn?.addEventListener("click", recalc);
+    estWordsEl?.addEventListener("input", recalc);
 
-    try {
-      // Current user (for path)
+    // ===== Estado del upload para no duplicar =====
+    let uploaded = null; // { gsPath, safeName, downloadURL }
+
+    // Subir + cotizar automáticamente al elegir archivo
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const user = auth.currentUser;
+        if (!user) { alert("Session expired. Please sign in again."); return; }
+
+        // 1) Subir a Storage
+        const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
+        const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
+        await uploadBytes(fileRef, file);
+        const downloadURL = await getDownloadURL(fileRef);
+        const gsPath = `crowd/uploads/${user.uid}/${safeName}`;
+        uploaded = { gsPath, safeName, downloadURL };
+
+        // 2) Llamar a la función para contar palabras
+        const resp = await getQuoteForFile({ gsPath });
+        const data = resp?.data || {};
+
+        if (data.scanned) {
+          // PDF escaneado sin texto — pedimos estimado manual
+          estWordsEl.value = "";
+          tierEl.value = "";
+          totalEl.value = "";
+          alert("We detected a scanned PDF. Please provide an estimated word count or upload a text-based file (DOCX/TXT/PDF con texto).");
+          return;
+        }
+
+        const words = Number(data.words || 0);
+        const rate = Number(data.rate || rateForWords(words));
+        const total = Number(data.total || (words * rate));
+
+        estWordsEl.value = words > 0 ? String(words) : "";
+        tierEl.value = `$${rate.toFixed(2)}/word`;
+        totalEl.value = formatUSD(total);
+
+      } catch (err) {
+        console.error(err);
+        alert("Could not auto-count words. You can still enter an estimate manually.");
+        uploaded = null; // reset si falla
+      }
+    });
+
+    // ===== Submit & Pay flow =====
+    const form = document.getElementById("projectRequestForm");
+    const confirmationMsg = document.getElementById("confirmationMsg");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const nonReg = document.getElementById("nonRegulated");
+      if (!nonReg?.checked) {
+        alert("Please confirm this is non-regulated content.");
+        return;
+      }
+
+      const sourceLang = document.getElementById("sourceLang").value;
+      const targetLang = document.getElementById("targetLang").value;
+      const notes = document.getElementById("notes").value;
+      const estWords = parseInt(estWordsEl?.value || "0", 10) || null;
+
       const user = auth.currentUser;
       if (!user) { alert("Session expired. Please sign in again."); return; }
 
-      // 1) Upload file to Storage
-      const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
-      const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
-      await uploadBytes(fileRef, file);
+      let fileName = null;
+      let filePath = null;
+      let downloadURL = null;
 
-      // (Optional) URL for internal use
-      const downloadURL = await getDownloadURL(fileRef);
+      // Si el usuario no cambió el archivo desde el auto-upload, reutilizamos
+      if (uploaded?.gsPath) {
+        fileName = uploaded.safeName;
+        filePath = uploaded.gsPath;
+        downloadURL = uploaded.downloadURL;
+      } else {
+        // (Fallback) si por alguna razón no hay upload previo, subimos ahora:
+        const file = fileInput.files[0];
+        if (!file) { alert("Please select a file."); return; }
+        const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
+        const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
+        await uploadBytes(fileRef, file);
+        downloadURL = await getDownloadURL(fileRef);
+        fileName = file.name;
+        filePath = `crowd/uploads/${user.uid}/${safeName}`;
+      }
 
-      // 2) Create request in Firestore
-      const reqRef = await addDoc(collection(db, "crowdRequests"), {
-        email: clientEmail,
-        fullName: clientFullName,
-        org: clientOrg,
-        sourceLang,
-        targetLang,
-        notes,
-        fileName: file.name,
-        filePath: `crowd/uploads/${user.uid}/${safeName}`,
-        downloadURL,
-        estWords,
-        nonRegulated: true,
-        status: "pending_payment",
-        createdAt: serverTimestamp()
-      });
-
-      // 3) EmailJS notify (optional)
       try {
-        await emailjs.send(
-          "service_mugdac3",
-          "template_a6ade8h",
-          {
-            sourceLang,
-            targetLang,
-            notes,
-            file: file.name,
+        // 1) Crear request en Firestore
+        const reqRef = await addDoc(collection(db, "crowdRequests"), {
+          email: clientEmail,
+          fullName: clientFullName,
+          org: clientOrg,
+          sourceLang,
+          targetLang,
+          notes,
+          fileName,
+          filePath,
+          downloadURL,
+          estWords,
+          nonRegulated: true,
+          status: "pending_payment",
+          createdAt: serverTimestamp()
+        });
+
+        // 2) EmailJS (no bloqueante)
+        try {
+          await emailjs.send("service_mugdac3", "template_a6ade8h", {
+            sourceLang, targetLang, notes,
+            file: fileName,
             email: clientEmail || "info@rolling-translations.com",
-            clientFullName,
-            clientOrg,
-            requestId: reqRef.id
-          }
-        );
-        console.log("✅ Email sent via EmailJS");
-      } catch (err) {
-        console.warn("EmailJS error (non-blocking):", err?.message || err);
+            clientFullName, clientOrg, requestId: reqRef.id
+          });
+        } catch (e) { console.warn("EmailJS:", e?.message || e); }
+
+        // 3) Apps Script (opcional)
+        try {
+          document.getElementById("fullnameField").value = clientFullName;
+          document.getElementById("emailField").value = clientEmail || "info@rolling-translations.com";
+          document.getElementById("phoneField").value = "";
+          document.getElementById("sourceLangField").value = sourceLang;
+          document.getElementById("targetLangField").value = targetLang;
+          document.getElementById("notesField").value = notes;
+          document.getElementById("fileNameField").value = fileName;
+          document.getElementById("spreadsheetForm").submit();
+        } catch (e) { console.warn("Apps Script:", e?.message || e); }
+
+        // 4) UI
+        confirmationMsg.style.display = "block";
+
+        // 5) TODO: Stripe Checkout
+        // const resp = await fetch("/api/checkout", {
+        //   method: "POST",
+        //   headers: { "Content-Type": "application/json" },
+        //   body: JSON.stringify({ requestId: reqRef.id, estWords })
+        // });
+        // const { url } = await resp.json();
+        // window.location.href = url;
+
+        alert("Payment step placeholder: connect Stripe Checkout and redirect here.");
+        form.reset();
+        uploaded = null;
+        tierEl.value = "";
+        totalEl.value = "";
+        estWordsEl.value = "";
+
+      } catch (error) {
+        console.error(error);
+        alert("⚠️ Error: " + (error?.message || error));
       }
+    });
+  </script>
 
-      // 4) Apps Script row (optional, as you had it)
-      try {
-        document.getElementById("fullnameField").value = clientFullName;
-        document.getElementById("emailField").value   = clientEmail || "info@rolling-translations.com";
-        document.getElementById("phoneField").value   = "";
-        document.getElementById("sourceLangField").value = sourceLang;
-        document.getElementById("targetLangField").value = targetLang;
-        document.getElementById("notesField").value   = notes;
-        document.getElementById("fileNameField").value= file.name;
-        document.getElementById("spreadsheetForm").submit();
-      } catch (err) {
-        console.warn("Apps Script submit error (non-blocking):", err?.message || err);
-      }
-
-      // 5) UI feedback
-      form.reset();
-      recalc();
-      confirmationMsg.style.display = "block";
-
-      // 6) TODO: Redirect to Stripe Checkout (replace with your backend endpoint)
-      // const resp = await fetch("/api/checkout", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ requestId: reqRef.id, estWords })
-      // });
-      // const { url } = await resp.json();
-      // window.location.href = url;
-
-      alert("Payment step placeholder: connect Stripe Checkout and redirect here.");
-
-    } catch (error) {
-      alert("⚠️ Error: " + (error?.message || error));
-      console.error(error);
-    }
-  });
-</script>
 
 </body>
+
 </html>
