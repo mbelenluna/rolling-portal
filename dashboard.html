@@ -409,6 +409,8 @@
         document.getElementById("notesField").value = notes;
         document.getElementById("fileNameField").value = listNames;
 
+        console.log("payload to Firestore", payload);
+
         const reqRef = await addDoc(collection(db, "crowdRequests"), payload);
 
         try {
@@ -440,7 +442,11 @@
               description: `Files: ${uploadedFiles.map(f => f.fileName).join(", ").slice(0, 500)}`
             })
           });
-          if (!resp.ok) throw new Error(`Checkout HTTP ${resp.status}`);
+          if (!resp.ok) {
+            const body = await resp.text();
+            console.error("Checkout bad response:", resp.status, body);
+            throw new Error(`Checkout HTTP ${resp.status}`);
+          }
           const { url } = await resp.json();
 
           // Redirige al Checkout de Stripe
