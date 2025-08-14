@@ -395,9 +395,9 @@
           rate: rateFinal,
           estimatedTotal: rateFinal ? totalFinal : MIN_TOTAL_USD,
           nonRegulated: true,
+          ownerUid: user.uid,
           status: "pending_payment",
-          createdAt: serverTimestamp(),
-          ownerUid: user.uid
+          createdAt: serverTimestamp()
         };
 
         const listNames = uploadedFiles.map(f => f.fileName).join(", ");

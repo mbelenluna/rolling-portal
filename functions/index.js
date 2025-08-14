@@ -182,6 +182,12 @@ exports.createCheckoutSession = onRequest(
             if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
             // --- robust config reads ---
+            logger.info("cfg check", {
+                hasStripeSecretFromCfg: !!STRIPE_SECRET_FROM_CFG,
+                envStripeUpper: !!process.env.STRIPE_SECRET_KEY,
+                envStripeLower: !!process.env.stripe_secret_key,
+                hasOriginFromCfg: !!ORIGIN_FROM_CFG
+            });
             const STRIPE_SECRET =
                 STRIPE_SECRET_FROM_CFG ||
                 process.env.STRIPE_SECRET_KEY ||
