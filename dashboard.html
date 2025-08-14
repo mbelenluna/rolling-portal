@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,6 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <link rel="icon" href="data:,">
 </head>
+
 <body>
 
   <div class="ribbon">
@@ -57,8 +59,9 @@
         </div>
       </div>
 
-      <label for="file">Upload File (*)</label>
-      <input type="file" id="file" required />
+      <!-- ⬇️ CAMBIO: multiple -->
+      <label for="files">Upload File(s) (*)</label>
+      <input type="file" id="files" multiple required />
 
       <label for="notes">Notes</label>
       <textarea id="notes" rows="3" placeholder="Context, audience, tone, glossary links..."></textarea>
@@ -70,11 +73,11 @@
 
       <div class="quote card soft">
         <h3>Instant Quote (beta)</h3>
-        <p class="muted">We’ll auto-count when possible (TXT/SRT). Otherwise, enter your estimated words.</p>
+        <p class="muted">We’ll auto-count when possible. Otherwise, enter your estimated words.</p>
 
         <div class="grid">
           <div>
-            <label for="estWords">Estimated words</label>
+            <label for="estWords">Estimated words (total)</label>
             <input type="number" id="estWords" min="1" step="1" placeholder="e.g., 12000" />
           </div>
           <div>
@@ -115,7 +118,6 @@
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
     import { getFirestore, addDoc, collection, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js";
-    // const analytics = getAnalytics(app);
 
     // ===== Firebase config =====
     const firebaseConfig = {
@@ -168,7 +170,7 @@
     const tierEl = document.getElementById("tier");
     const totalEl = document.getElementById("total");
     const calcBtn = document.getElementById("calcBtn");
-    const fileInput = document.getElementById("file");
+    const filesInput = document.getElementById("files");
     const MIN_TOTAL_USD = 1.00;
 
     function rateForWords(w) {
@@ -183,79 +185,93 @@
     function formatUSD(n) {
       return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
     }
-
-    function computeQuote(w) {
-      const rate = rateForWords(w || 0);
-      const raw = (w || 0) * rate;
+    function computeQuote(totalWords) {
+      const w = Number(totalWords || 0);
+      const rate = rateForWords(w);
+      const raw = w * rate;
       const total = Math.max(raw, MIN_TOTAL_USD);
-      const appliedMinimum = (w || 0) > 0 && raw < MIN_TOTAL_USD;
+      const appliedMinimum = w > 0 && raw < MIN_TOTAL_USD;
       return { rate, total, appliedMinimum };
+    }
+    function updateUIFromWords(totalWords, rateOverride = null) {
+      const w = Number(totalWords || 0);
+      const rate = (rateOverride != null) ? Number(rateOverride) : rateForWords(w);
+      const raw = w * rate;
+      const total = Math.max(raw, MIN_TOTAL_USD);
+      const showMin = w > 0 && raw < MIN_TOTAL_USD;
+      tierEl.value = `$${rate.toFixed(2)}/word`;
+      totalEl.value = formatUSD(total) + (showMin ? " (min)" : "");
+      return { rate, total };
     }
 
     function recalc() {
       const w = parseInt(estWordsEl?.value || "0", 10);
       if (!w || w <= 0) { tierEl.value = ""; totalEl.value = ""; return; }
-      const { rate, total, appliedMinimum } = computeQuote(w);
-      tierEl.value = `$${rate.toFixed(2)}/word`;
-      totalEl.value = formatUSD(total) + (appliedMinimum ? " (min)" : "");
+      updateUIFromWords(w);
     }
     calcBtn?.addEventListener("click", recalc);
     estWordsEl?.addEventListener("input", recalc);
 
-    // ===== Estado del upload para no duplicar =====
-    let uploaded = null; // { gsPath, safeName, downloadURL }
+    // ===== Estado de uploads múltiples =====
+    // Estructura: [{ fileName, filePath, downloadURL, words }]
+    let uploadedFiles = [];
 
-    // Subir + cotizar automáticamente al elegir archivo
-    fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+    async function uploadAndCountOne(file, user) {
+      const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
+      const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
+      await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
+
+      let downloadURL = null;
+      try { downloadURL = await getDownloadURL(fileRef); } catch { downloadURL = null; }
+
+      const gsPath = `crowd/uploads/${user.uid}/${safeName}`;
+
+      // Llamar a la función de conteo
+      const quoteResp = await fetch("https://us-central1-rolling-crowdsourcing.cloudfunctions.net/getQuoteForFile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gsPath, uid: user.uid })
+      });
+      if (!quoteResp.ok) throw new Error(`HTTP ${quoteResp.status}`);
+      const q = await quoteResp.json();
+
+      if (q.scanned) {
+        // Devolvemos objeto marcado como escaneado y 0 palabras
+        return { fileName: file.name, filePath: gsPath, downloadURL, words: 0, scanned: true };
+      }
+
+      const words = Number(q.words || 0);
+      return { fileName: file.name, filePath: gsPath, downloadURL, words, scanned: false };
+    }
+
+    // Subir + cotizar automáticamente al elegir archivos
+    filesInput.addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
 
       try {
         const user = auth.currentUser;
         if (!user) { alert("Session expired. Please sign in again."); return; }
 
-        // 1) Subir a Storage
-        const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
-        const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
-        await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
+        // Subimos y contamos todos (secuencial o Promise.all; uso Promise.all para velocidad)
+        const results = await Promise.all(files.map(f => uploadAndCountOne(f, user)));
+        uploadedFiles = results;
 
-        // (Opcional) URL pública
-        let downloadURL = null;
-        try { downloadURL = await getDownloadURL(fileRef); } catch { downloadURL = null; }
-
-        const gsPath = `crowd/uploads/${user.uid}/${safeName}`;
-        uploaded = { gsPath, safeName, downloadURL };
-
-        // 2) Llamar a la función HTTP para contar palabras
-        const quoteResp = await fetch("https://us-central1-rolling-crowdsourcing.cloudfunctions.net/getQuoteForFile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gsPath, uid: user.uid })
-        });
-        if (!quoteResp.ok) throw new Error(`HTTP ${quoteResp.status}`);
-        const q = await quoteResp.json();
-
-        if (q.scanned) {
-          estWordsEl.value = "";
-          tierEl.value = "";
-          totalEl.value = "";
-          alert("We detected a scanned PDF. Please provide an estimated word count or upload a text-based file (DOCX/TXT/PDF con texto).");
-          return;
+        // Avisar si alguno fue "scanned"
+        if (results.some(r => r.scanned)) {
+          alert("We detected one or more scanned PDFs. Please provide an estimated word count for those or upload text-based files.");
         }
 
-        const words = Number(q.words || 0);
-        const rate  = Number(q.rate ?? rateForWords(words));
-        const baseTotal = Number(q.total ?? (words * rate));
-        const minAdjustedTotal = Math.max(baseTotal, MIN_TOTAL_USD); // $1 min
+        // Sumar palabras totales (los escaneados aportan 0 aquí)
+        const totalWords = results.reduce((sum, r) => sum + (Number(r.words) || 0), 0);
 
-        estWordsEl.value = words > 0 ? String(words) : "";
-        tierEl.value = `$${rate.toFixed(2)}/word`;
-        totalEl.value = formatUSD(minAdjustedTotal) + ((words > 0 && words * rate < MIN_TOTAL_USD) ? " (min)" : "");
-
+        // Reflejar en UI
+        estWordsEl.value = totalWords > 0 ? String(totalWords) : "";
+        updateUIFromWords(totalWords);
       } catch (err) {
         console.error(err);
-        alert("Could not auto-count words. You can still enter an estimate manually.");
-        uploaded = null; // reset si falla
+        alert("Could not auto-count some files. You can still enter a total estimate manually.");
+        uploadedFiles = []; // reset si falla
       }
     });
 
@@ -278,79 +294,34 @@
       const user = auth.currentUser;
       if (!user) { alert("Session expired. Please sign in again."); return; }
 
-      // UI refs
-      const estWordsEl = document.getElementById("estWords");
-      const tierEl = document.getElementById("tier");
-      const totalEl = document.getElementById("total");
-
-      let fileName = null;
-      let filePath = null;
-      let downloadURL = null;
-
-      // Reutilizar upload previo si existe
-      if (uploaded?.gsPath) {
-        fileName = uploaded.safeName;
-        filePath = uploaded.gsPath;
-        downloadURL = uploaded.downloadURL || null;
-      } else {
-        // Fallback: subir ahora
-        const file = fileInput.files[0];
-        if (!file) { alert("Please select a file."); return; }
-        const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
-        const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
-        await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
-        try { downloadURL = await getDownloadURL(fileRef); } catch { downloadURL = null; }
-        fileName = file.name;
-        filePath = `crowd/uploads/${user.uid}/${safeName}`;
+      // Si el usuario pegó archivos pero no subimos (por ejemplo, reingresó), subimos ahora:
+      if (!uploadedFiles.length) {
+        const files = Array.from(filesInput.files || []);
+        if (!files.length) { alert("Please select at least one file."); return; }
+        try {
+          const results = await Promise.all(files.map(f => uploadAndCountOne(f, user)));
+          uploadedFiles = results;
+          if (results.some(r => r.scanned)) {
+            alert("We detected one or more scanned PDFs. Please provide an estimated word count for those or upload text-based files.");
+          }
+        } catch (err) {
+          console.warn("Upload/count on submit failed:", err?.message || err);
+          alert("We couldn't process the files. Please try again.");
+          return;
+        }
       }
 
-      // === 1) Llamar a la función HTTP para cotizar ===
-      let wordsFromFn = null, rateFromFn = null, totalFromFn = null, scanned = false;
-      try {
-        const quoteResp = await fetch("https://us-central1-rolling-crowdsourcing.cloudfunctions.net/getQuoteForFile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gsPath: filePath, uid: user.uid })
-        });
-        if (!quoteResp.ok) throw new Error(`HTTP ${quoteResp.status}`);
-        const q = await quoteResp.json();
-
-        wordsFromFn = Number(q.words ?? 0);
-        rateFromFn  = q.rate  != null ? Number(q.rate)  : null;
-        totalFromFn = q.total != null ? Number(q.total) : null;
-        scanned = Boolean(q.scanned);
-
-        // Aplicar mínimo si vino total
-        if (totalFromFn != null) {
-          totalFromFn = Math.max(Number(totalFromFn), MIN_TOTAL_USD);
-        }
-
-        if (scanned) {
-          alert("We detected a scanned PDF. Please provide an estimated word count or upload a text-based file.");
-        }
-        if (wordsFromFn > 0) estWordsEl.value = String(wordsFromFn);
-
-      } catch (err) {
-        console.warn("Quote function error:", err?.message || err);
-        // El usuario puede ingresar words manualmente
-      }
-
-      // === 2) Calcular valores finales (siempre en un solo lugar) ===
+      // Palabras totales (conteo real) + posibilidad de override manual
+      const countedWords = uploadedFiles.reduce((sum, r) => sum + (Number(r.words) || 0), 0);
       const estWordsManual = parseInt(estWordsEl?.value || "0", 10) || 0;
-      const estWordsFinal  = (wordsFromFn && wordsFromFn > 0) ? wordsFromFn : estWordsManual;
+      // Si el usuario corrigió manualmente (p.ej. por archivos escaneados), tomamos ese total:
+      const totalWords = estWordsManual > 0 ? estWordsManual : countedWords;
 
-      const rateFinal  = (rateFromFn != null) ? rateFromFn : rateForWords(estWordsFinal || 0);
-      const totalFinal = (totalFromFn != null)
-        ? totalFromFn
-        : Math.max(((estWordsFinal || 0) * rateFinal), MIN_TOTAL_USD);
-
-      // Reflejar en UI (por si no apretó "Calculate")
-      tierEl.value  = rateFinal ? `$${rateFinal.toFixed(2)}/word` : tierEl.value;
-      const showMinTag = ((estWordsFinal || 0) > 0) && ((estWordsFinal || 0) * rateFinal < MIN_TOTAL_USD);
-      totalEl.value = formatUSD(totalFinal) + (showMinTag ? " (min)" : "");
+      // Calcular rate/total finales por totalWords (mínimo $1)
+      const { rate: rateFinal, total: totalFinal } = updateUIFromWords(totalWords);
 
       try {
-        // === 3) Guardar en Firestore ===
+        // === Guardar en Firestore ===
         const payload = {
           email: clientEmail,
           fullName: clientFullName,
@@ -358,57 +329,61 @@
           sourceLang,
           targetLang,
           notes,
-          fileName,
-          filePath,
-          estWords: estWordsFinal,
+          files: uploadedFiles.map(f => ({
+            fileName: f.fileName,
+            filePath: f.filePath,
+            downloadURL: f.downloadURL || null,
+            words: Number(f.words || 0),
+            scanned: !!f.scanned
+          })),
+          totalWords: totalWords,
           rate: rateFinal,
-          estimatedTotal: totalFinal,
+          estimatedTotal: rateFinal ? totalFinal : MIN_TOTAL_USD,
           nonRegulated: true,
           status: "pending_payment",
           createdAt: serverTimestamp()
         };
-        if (downloadURL) payload.downloadURL = downloadURL;
-        if (scanned) payload.scanDetected = true;
+
+        // Para compatibilidad con tu Apps Script (un solo campo fileName), mandamos listado simple:
+        const listNames = uploadedFiles.map(f => f.fileName).join(", ");
+        document.getElementById("fullnameField").value = clientFullName;
+        document.getElementById("emailField").value = clientEmail || "info@rolling-translations.com";
+        document.getElementById("phoneField").value = "";
+        document.getElementById("sourceLangField").value = sourceLang;
+        document.getElementById("targetLangField").value = targetLang;
+        document.getElementById("notesField").value = notes;
+        document.getElementById("fileNameField").value = listNames;
 
         const reqRef = await addDoc(collection(db, "crowdRequests"), payload);
 
-        // === 4) EmailJS (no bloqueante) ===
+        // === EmailJS (no bloqueante) ===
         try {
           await emailjs.send("service_mugdac3", "template_a6ade8h", {
             sourceLang, targetLang, notes,
-            file: fileName,
+            file: listNames,
             email: clientEmail || "info@rolling-translations.com",
             clientFullName, clientOrg, requestId: reqRef.id
           });
         } catch (e) { console.warn("EmailJS:", e?.message || e); }
 
-        // === 5) Apps Script (opcional) ===
-        try {
-          document.getElementById("fullnameField").value = clientFullName;
-          document.getElementById("emailField").value = clientEmail || "info@rolling-translations.com";
-          document.getElementById("phoneField").value = "";
-          document.getElementById("sourceLangField").value = sourceLang;
-          document.getElementById("targetLangField").value = targetLang;
-          document.getElementById("notesField").value = notes;
-          document.getElementById("fileNameField").value = fileName;
-          document.getElementById("spreadsheetForm").submit();
-        } catch (e) { console.warn("Apps Script:", e?.message || e); }
+        // === Apps Script (opcional) ===
+        try { document.getElementById("spreadsheetForm").submit(); } catch (e) { console.warn("Apps Script:", e?.message || e); }
 
-        // === 6) UI ===
+        // === UI ===
         confirmationMsg.style.display = "block";
 
-        // === 7) TODO: Stripe Checkout ===
+        // TODO: Stripe Checkout (con totalWords)
         // const resp = await fetch("/api/checkout", {
         //   method: "POST",
         //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify({ requestId: reqRef.id, estWords: estWordsFinal })
+        //   body: JSON.stringify({ requestId: reqRef.id, totalWords })
         // });
         // const { url } = await resp.json();
         // window.location.href = url;
 
         alert("Payment step placeholder: connect Stripe Checkout and redirect here.");
         form.reset();
-        uploaded = null;
+        uploadedFiles = [];
         tierEl.value = "";
         totalEl.value = "";
         estWordsEl.value = "";
@@ -420,4 +395,5 @@
     });
   </script>
 </body>
+
 </html>
