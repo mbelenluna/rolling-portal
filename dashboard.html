@@ -211,8 +211,10 @@
         // 1) Subir a Storage
         const safeName = `${Date.now()}_${file.name.replace(/[^\w\-\.]+/g, "_")}`;
         const fileRef = ref(storage, `crowd/uploads/${user.uid}/${safeName}`);
-        await uploadBytes(fileRef, file);
-        const downloadURL = await getDownloadURL(fileRef);
+        await uploadBytes(fileRef, file, {
+          contentType: file.type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        });
+        // const downloadURL = await getDownloadURL(fileRef);
         const gsPath = `crowd/uploads/${user.uid}/${safeName}`;
         uploaded = { gsPath, safeName, downloadURL };
 
