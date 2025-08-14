@@ -1,6 +1,7 @@
 // Cloud Functions v2 (HTTP + CORS integrado)
 const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
+const logger = require("firebase-functions/logger");
 
 // Región por defecto para TODAS las functions
 setGlobalOptions({ region: "us-central1" });
@@ -12,7 +13,10 @@ const mammoth = require("mammoth");
 const xlsx = require("xlsx");
 const fileTypeLib = require("file-type");
 
-// Inicializar Admin apuntando al bucket NUEVO (.firebasestorage.app)
+// Stripe
+const Stripe = require("stripe");
+
+// === Inicializar Admin apuntando al bucket NUEVO (.firebasestorage.app)
 admin.initializeApp({
     storageBucket: "rolling-crowdsourcing.firebasestorage.app",
 });
@@ -20,21 +24,32 @@ const bucket = admin.storage().bucket();
 
 /* ===================== Helpers ===================== */
 
-// Contador de palabras simple (sin unicode properties para evitar errores de lint)
+// Contador de palabras simple (sin unicode properties)
 function countWordsGeneric(text) {
     if (!text) return 0;
-    // Reemplaza caracteres no alfanuméricos por espacios
     const cleaned = String(text).replace(/[^A-Za-z0-9’'-]+/g, " ");
     const parts = cleaned.trim().split(/\s+/);
     return parts[0] === "" ? 0 : parts.length;
 }
 
+// ⚠️ MISMA tabla de tarifas que en el frontend (tramos grandes)
 function rateForWords(words) {
-    if (words >= 300000) return 0.05;
-    if (words >= 100000) return 0.06;
-    if (words >= 10000) return 0.07;
-    if (words >= 1000) return 0.09;
+    const w = Number(words || 0);
+    if (w >= 1000000) return 0.04;
+    if (w >= 500000) return 0.05;
+    if (w >= 300000) return 0.055;
+    if (w >= 100000) return 0.06;
+    if (w >= 50000) return 0.07;
+    if (w >= 10000) return 0.08;
     return 0.10;
+}
+
+function computeAmountCents(totalWords) {
+    const MIN_USD = 1.0;
+    const rate = rateForWords(totalWords || 0);
+    const raw = (totalWords || 0) * rate;
+    const total = Math.max(raw, MIN_USD);
+    return { rate, amountCents: Math.round(total * 100) };
 }
 
 async function fileTypeFromBufferSafe(buf) {
@@ -99,9 +114,11 @@ async function extractTextFromBuffer(buf, filename) {
 
 /* ===================== Function HTTP (v2) ===================== */
 /**
- * HTTP onRequest con CORS integrado. Permitimos SOLO tu frontend de GitHub Pages.
- * Frontend: fetch("https://us-central1-rolling-crowdsourcing.cloudfunctions.net/getQuoteForFile", { method:"POST", ... })
+ * HTTP onRequest con CORS integrado.
+ * Frontend permitido: GitHub Pages de Belu.
  */
+
+// === 1) getQuoteForFile (tu función existente, con tarifas alineadas) ===
 exports.getQuoteForFile = onRequest(
     { cors: ["https://mbelenluna.github.io"] },
     async (req, res) => {
@@ -143,8 +160,130 @@ exports.getQuoteForFile = onRequest(
             return res.json({ words, rate, total, currency: "USD" });
 
         } catch (err) {
-            console.error("getQuoteForFile error:", err);
+            logger.error("getQuoteForFile error", err);
             return res.status(500).send(err.message || "Internal Server Error");
+        }
+    }
+);
+
+// === 2) createCheckoutSession (Stripe Checkout) ===
+exports.createCheckoutSession = onRequest(
+    { cors: ["https://mbelenluna.github.io"] },
+    async (req, res) => {
+        try {
+            if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+
+            const STRIPE_SECRET =
+                process.env.STRIPE_SECRET_KEY ||
+                process.env.stripe_secret_key;
+
+            if (!STRIPE_SECRET) {
+                return res.status(500).json({ error: "Stripe secret key not configured" });
+            }
+
+            const stripe = new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" });
+
+            const { requestId, totalWords = 0, email, description } = req.body || {};
+            if (!requestId) return res.status(400).json({ error: "Missing requestId" });
+
+            const { rate, amountCents } = computeAmountCents(Number(totalWords || 0));
+
+            const ORIGIN =
+                process.env.CHECKOUT_ORIGIN ||
+                process.env.checkout_origin ||
+                "https://mbelenluna.github.io";
+
+            const session = await stripe.checkout.sessions.create({
+                mode: "payment",
+                customer_email: email || undefined,
+                line_items: [{
+                    price_data: {
+                        currency: "usd",
+                        product_data: {
+                            name: "Crowdsourced translation",
+                            description: description || `Total words: ${totalWords}`
+                        },
+                        unit_amount: amountCents
+                    },
+                    quantity: 1
+                }],
+                success_url: `${ORIGIN}/success?session_id={CHECKOUT_SESSION_ID}&requestId=${encodeURIComponent(requestId)}`,
+                cancel_url: `${ORIGIN}/cancel?requestId=${encodeURIComponent(requestId)}`,
+                payment_intent_data: {
+                    description: `Crowdsourced translation — ${totalWords} words @ ${rate.toFixed(2)}/word`,
+                    metadata: { requestId, totalWords: String(totalWords) }
+                },
+                metadata: { requestId, totalWords: String(totalWords) }
+            });
+
+            await admin.firestore().collection("crowdRequests").doc(requestId).set({
+                stripeSessionId: session.id,
+                stripeMode: "payment",
+                checkoutCreatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            return res.json({ url: session.url });
+
+        } catch (err) {
+            logger.error("createCheckoutSession error", err);
+            return res.status(500).json({ error: err?.message || "Server error" });
+        }
+    }
+);
+
+// === 3) stripeWebhook (marca como pagado) ===
+// Importante: Stripe requiere RAW body para firmar. onRequest v2 expone req.rawBody.
+exports.stripeWebhook = onRequest(
+    { cors: false, maxInstances: 1 },
+    async (req, res) => {
+        try {
+            const STRIPE_SECRET =
+                process.env.STRIPE_SECRET_KEY ||
+                process.env.stripe_secret_key;
+            if (!STRIPE_SECRET) return res.status(500).send("Stripe not configured");
+
+            const stripe = new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" });
+
+            const sig = req.headers["stripe-signature"];
+            const whsec =
+                process.env.STRIPE_WEBHOOK_SECRET ||
+                process.env.stripe_webhook_secret;
+
+            if (!sig || !whsec) {
+                return res.status(400).send("Missing webhook signature or secret");
+            }
+
+            let event;
+            try {
+                event = stripe.webhooks.constructEvent(req.rawBody, sig, whsec);
+            } catch (err) {
+                return res.status(400).send(`Webhook Error: ${err.message}`);
+            }
+
+            if (event.type === "checkout.session.completed") {
+                const session = event.data.object;
+                const requestId = session?.metadata?.requestId;
+                const amountTotal = session?.amount_total; // cents
+                const paymentIntentId = session?.payment_intent;
+
+                if (requestId) {
+                    await admin.firestore().collection("crowdRequests").doc(requestId).set({
+                        status: "paid",
+                        paidAt: admin.firestore.FieldValue.serverTimestamp(),
+                        payment: {
+                            amountCents: amountTotal ?? null,
+                            currency: session?.currency ?? "usd",
+                            sessionId: session.id,
+                            paymentIntentId: paymentIntentId || null
+                        }
+                    }, { merge: true });
+                }
+            }
+
+            return res.json({ received: true });
+        } catch (err) {
+            logger.error("Webhook handler error", err);
+            return res.status(500).send("Webhook handler error");
         }
     }
 );

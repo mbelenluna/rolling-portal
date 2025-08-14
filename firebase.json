@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "storage": {
     "rules": "storage.rules"
   },
@@ -14,7 +17,6 @@
         "firebase-debug.*.log",
         "*.local"
       ]
-
     }
   ]
 }
