@@ -8,6 +8,7 @@
   <meta name="robots" content="noindex, nofollow" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <link rel="icon" href="data:,">
 </head>
 
 <body>
@@ -216,6 +217,7 @@
         });
         // const downloadURL = await getDownloadURL(fileRef);
         const gsPath = `crowd/uploads/${user.uid}/${safeName}`;
+        const downloadURL = null;
         uploaded = { gsPath, safeName, downloadURL };
 
         // 2) Llamar a la función para contar palabras
@@ -289,8 +291,8 @@
       }
 
       try {
-        // 1) Crear request en Firestore
-        const reqRef = await addDoc(collection(db, "crowdRequests"), {
+        // 1) Crear payload
+        const payload = {
           email: clientEmail,
           fullName: clientFullName,
           org: clientOrg,
@@ -299,14 +301,17 @@
           notes,
           fileName,
           filePath,
-          downloadURL,
           estWords,
           nonRegulated: true,
           status: "pending_payment",
           createdAt: serverTimestamp()
-        });
+        };
+        if (downloadURL) payload.downloadURL = downloadURL; // solo si existe
 
-        // 2) EmailJS (no bloqueante)
+        // 2) Guardar en Firestore
+        const reqRef = await addDoc(collection(db, "crowdRequests"), payload);
+
+        // 3) EmailJS (no bloqueante)
         try {
           await emailjs.send("service_mugdac3", "template_a6ade8h", {
             sourceLang, targetLang, notes,
@@ -316,7 +321,7 @@
           });
         } catch (e) { console.warn("EmailJS:", e?.message || e); }
 
-        // 3) Apps Script (opcional)
+        // 4) Apps Script (opcional)
         try {
           document.getElementById("fullnameField").value = clientFullName;
           document.getElementById("emailField").value = clientEmail || "info@rolling-translations.com";
@@ -328,10 +333,10 @@
           document.getElementById("spreadsheetForm").submit();
         } catch (e) { console.warn("Apps Script:", e?.message || e); }
 
-        // 4) UI
+        // 5) UI
         confirmationMsg.style.display = "block";
 
-        // 5) TODO: Stripe Checkout
+        // 6) TODO: Stripe Checkout
         // const resp = await fetch("/api/checkout", {
         //   method: "POST",
         //   headers: { "Content-Type": "application/json" },
@@ -352,6 +357,7 @@
         alert("⚠️ Error: " + (error?.message || error));
       }
     });
+
   </script>
 
 
