@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,16 +17,23 @@
       align-items: center;
       gap: .5rem;
     }
+
     #quoteStatus::before {
       content: "";
-      width: 0.9em; height: 0.9em;
+      width: 0.9em;
+      height: 0.9em;
       border: 2px solid currentColor;
       border-top-color: transparent;
       border-radius: 50%;
       display: inline-block;
       animation: spin .8s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
   </style>
 </head>
 
@@ -414,23 +422,36 @@
 
         try { document.getElementById("spreadsheetForm").submit(); } catch (e) { console.warn("Apps Script:", e?.message || e); }
 
+        // Muestra el OK antes de ir a pagar
         confirmationMsg.style.display = "block";
 
-        // TODO: Stripe Checkout (con totalWords)
-        // const resp = await fetch("/api/checkout", {
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify({ requestId: reqRef.id, totalWords })
-        // });
-        // const { url } = await resp.json();
-        // window.location.href = url;
+        // === Redirect to Stripe Checkout ===
+        try {
+          // (opcional) muestra loading en el card de cotización, si tenés setQuoteLoading
+          if (typeof setQuoteLoading === "function") setQuoteLoading(true, "Opening payment…");
 
-        alert("Payment step placeholder: connect Stripe Checkout and redirect here.");
-        form.reset();
-        uploadedFiles = [];
-        tierEl.value = "";
-        totalEl.value = "";
-        estWordsEl.value = "";
+          const resp = await fetch("https://us-central1-rolling-crowdsourcing.cloudfunctions.net/createCheckoutSession", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              requestId: reqRef.id,
+              totalWords, // el total final que ya calculaste
+              email: clientEmail || null,
+              description: `Files: ${uploadedFiles.map(f => f.fileName).join(", ").slice(0, 500)}`
+            })
+          });
+          if (!resp.ok) throw new Error(`Checkout HTTP ${resp.status}`);
+          const { url } = await resp.json();
+
+          // Redirige al Checkout de Stripe
+          window.location.href = url;
+          return; // importante: no sigas con reset()
+        } catch (e) {
+          console.error("Checkout redirect error:", e);
+          if (typeof setQuoteLoading === "function") setQuoteLoading(false);
+          alert("We couldn't start the payment. Please try again.");
+        }
+
 
       } catch (error) {
         console.error(error);
@@ -439,4 +460,5 @@
     });
   </script>
 </body>
+
 </html>
