@@ -15,6 +15,13 @@ const fileTypeLib = require("file-type");
 
 // Stripe
 const Stripe = require("stripe");
+const functionsBase = require("firebase-functions"); // para runtime config (v1/v2)
+const CFG = (functionsBase.config && functionsBase.config()) ? functionsBase.config() : {};
+
+const STRIPE_SECRET_FROM_CFG = (CFG.stripe && CFG.stripe.secret_key) || null;
+const WEBHOOK_SECRET_FROM_CFG = (CFG.stripe && CFG.stripe.webhook_secret) || null;
+const ORIGIN_FROM_CFG = (CFG.checkout && CFG.checkout.origin) || null;
+
 
 // === Inicializar Admin apuntando al bucket NUEVO (.firebasestorage.app)
 admin.initializeApp({
@@ -168,12 +175,15 @@ exports.getQuoteForFile = onRequest(
 
 // === 2) createCheckoutSession (Stripe Checkout) ===
 exports.createCheckoutSession = onRequest(
+    // You can relax to { cors: true } temporarily if needed for testing
     { cors: ["https://mbelenluna.github.io"] },
     async (req, res) => {
         try {
             if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
+            // --- robust config reads ---
             const STRIPE_SECRET =
+                STRIPE_SECRET_FROM_CFG ||
                 process.env.STRIPE_SECRET_KEY ||
                 process.env.stripe_secret_key;
 
@@ -189,6 +199,7 @@ exports.createCheckoutSession = onRequest(
             const { rate, amountCents } = computeAmountCents(Number(totalWords || 0));
 
             const ORIGIN =
+                ORIGIN_FROM_CFG ||
                 process.env.CHECKOUT_ORIGIN ||
                 process.env.checkout_origin ||
                 "https://mbelenluna.github.io";
