@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Successful — Rolling Translations</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0ea5e9" />
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    :root{
+      --bg:#ffffff;
+      --surface:#ffffff;
+      --border:#e2e8f0;
+      --text:#0f172a;
+      --muted:#475569;
+      --accent:#0ea5e9;
+      --accent-2:#0369a1;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans";
+      color:var(--text);
+      background: var(--bg);
+      display:flex;align-items:center;justify-content:center;
+      padding:24px;
+    }
+    .wrap{max-width:780px;width:100%}
+    .card{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:20px;
+      padding:28px;
+      box-shadow: 0 10px 30px rgba(2,6,23,.06);
+    }
+    header{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+    header img{height:34px;width:auto;display:block}
+    h1{margin:0 0 4px 0;font-size:clamp(22px,2.6vw,30px);letter-spacing:.2px}
+    .subtle{color:var(--muted);font-size:14px;line-height:1.5}
+    .success{display:flex;gap:16px;align-items:center;margin: 14px 0 18px}
+    .check{
+      --s:72px;
+      height:var(--s);width:var(--s);
+      border-radius:999px;
+      background: radial-gradient(140% 140% at 30% 20%, rgba(14,165,233,.25), rgba(14,165,233,.12) 40%, transparent 60%),
+                  linear-gradient(135deg, rgba(14,165,233,.20), rgba(14,165,233,.35));
+      border:1px solid rgba(14,165,233,.35);
+      box-shadow: 0 8px 24px rgba(14,165,233,.25);
+      display:grid;place-items:center;
+      animation: pop .42s cubic-bezier(.2,.8,.2,1) .08s both;
+    }
+    @keyframes pop{from{transform:scale(.85);opacity:0} to{transform:scale(1);opacity:1}}
+    .check svg{width:38px;height:38px;stroke:#0c4a6e;stroke-width:3}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:6px}
+    .info{border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff}
+    .label{color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:.12em}
+    .value{font-size:16px;margin-top:6px;word-break:break-all}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+    .btn{
+      appearance:none;border:0;cursor:pointer;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      color:white;border-radius:12px;padding:12px 16px;font-weight:600;
+      text-decoration:none;display:inline-flex;align-items:center;gap:8px;
+      box-shadow: 0 8px 22px rgba(14,165,233,.25);
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .btn:hover{transform:translateY(-1px); box-shadow: 0 12px 26px rgba(14,165,233,.35);}
+    .btn.secondary{
+      background: transparent;color: var(--accent-2);
+      border:1px solid var(--border);
+      box-shadow:none;
+    }
+    footer{margin-top:16px;font-size:13px;color:#64748b}
+    .hl{color:#0369a1}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="card">
+      <header>
+        <img src="images/logo.png" alt="Rolling Translations" />
+        <div>
+          <h1>Payment successful</h1>
+          <p class="subtle">Your order has been placed. You’ll receive a confirmation email shortly.</p>
+        </div>
+      </header>
+
+      <section class="success">
+        <div class="check" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div class="subtle">
+          Thank you for choosing <span class="hl">Rolling Translations</span>! If you have any questions in the meantime,
+          reach us at <a class="hl" href="mailto:info@rolling-translations.com">info@rolling-translations.com</a>.
+        </div>
+      </section>
+
+      <div class="grid">
+        <div class="info">
+          <div class="label">Order ID</div>
+          <div class="value" id="orderId">—</div>
+        </div>
+        <div class="info">
+          <div class="label">Payment Ref</div>
+          <div class="value" id="paymentRef">—</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a class="btn" id="homeBtn" href="https://rolling-translations.com/pages/crowdsource.html">← Back to Home</a>
+        <a class="btn secondary" id="receiptBtn" href="#" target="_blank" rel="noopener">View Stripe receipt</a>
+      </div>
+
+      <footer>
+        Tip: Keep this page for your reference. You’ll get status updates by email as your translation progresses.
+      </footer>
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(location.search);
+      const requestId = params.get("requestId");
+      const sessionId = params.get("session_id");
+
+      const orderIdEl = document.getElementById("orderId");
+      const paymentRefEl = document.getElementById("paymentRef");
+      const receiptBtn = document.getElementById("receiptBtn");
+
+      if (requestId) orderIdEl.textContent = requestId;
+      if (sessionId) {
+        paymentRefEl.textContent = "… " + sessionId.slice(-8);
+        receiptBtn.href = "#";
+        receiptBtn.style.pointerEvents = "none";
+        receiptBtn.style.opacity = ".6";
+        receiptBtn.textContent = "Receipt will be emailed";
+      } else {
+        paymentRefEl.textContent = "—";
+        receiptBtn.href = "#";
+        receiptBtn.style.pointerEvents = "none";
+        receiptBtn.style.opacity = ".6";
+        receiptBtn.textContent = "Receipt will be emailed";
+      }
+
+      // Ensure home goes to the GH Pages root for the repo
+      const homeBtn = document.getElementById("homeBtn");
+    })();
+  </script>
+</body>
+</html>
