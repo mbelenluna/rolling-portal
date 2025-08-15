@@ -2,7 +2,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
-const { defineSecret, defineString } = require("firebase-functions/params");
+const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 
 // Admin SDK
@@ -33,8 +33,10 @@ const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 
-// Config param (lowercase): set with `firebase functions:config:set checkout_origin="https://mbelenluna.github.io/rolling-portal"`
-const CHECKOUT_ORIGIN = defineString("checkout_origin");
+const CHECKOUT_ORIGIN =
+  process.env.checkout_origin ||
+  process.env.CHECKOUT_ORIGIN ||
+  "https://mbelenluna.github.io/rolling-portal";
 
 // Allowed CORS origins for your frontend(s)
 const ALLOWED_ORIGINS = [
@@ -217,7 +219,7 @@ exports.createCheckoutSession = onRequest(
 
       const { rate, amountCents } = computeAmountCents(wordsServer);
 
-      const origin = CHECKOUT_ORIGIN.value() || "https://mbelenluna.github.io/rolling-portal";
+      const origin = CHECKOUT_ORIGIN;
 
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
